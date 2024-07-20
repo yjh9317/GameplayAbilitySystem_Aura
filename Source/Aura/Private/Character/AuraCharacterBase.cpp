@@ -5,19 +5,27 @@
 #include "AuraGameplayTags.h"
 #include "AbilitySystem/AuraAbilitySystemComponent.h"
 #include "AbilitySystem/Debuff/DebuffNiagaraComponent.h"
+#include "AbilitySystem/Passive/PassiveNiagaraComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "Net/UnrealNetwork.h"
+
 
 AAuraCharacterBase::AAuraCharacterBase()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
 	
 	const FAuraGameplayTags& GameplayTags = FAuraGameplayTags::Get();
 	
 	BurnDebuffComponent = CreateDefaultSubobject<UDebuffNiagaraComponent>("BurnDebuffComponent");
 	BurnDebuffComponent->SetupAttachment(GetRootComponent());
 	BurnDebuffComponent->DebuffTag = GameplayTags.Debuff_Burn;
-
+	
+	StunDebuffComponent = CreateDefaultSubobject<UDebuffNiagaraComponent>("StunDebuffComponent");
+	StunDebuffComponent->SetupAttachment(GetRootComponent());
+	StunDebuffComponent->DebuffTag = GameplayTags.Debuff_Stun;
+	
 	Weapon = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Weapon"));
 	Weapon->SetupAttachment(GetMesh(),FName("WeaponHandSocket"));
 	Weapon->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -28,7 +36,39 @@ AAuraCharacterBase::AAuraCharacterBase()
 	GetMesh()->SetCollisionResponseToChannel(ECC_Projectile, ECR_Overlap);
 	GetMesh()->SetGenerateOverlapEvents(true);
 	
+
+	EffectAttachComponent = CreateDefaultSubobject<USceneComponent>("EffectAttachPoint");
+	EffectAttachComponent->SetupAttachment(GetRootComponent());
+	HaloOfProtectionNiagaraComponent = CreateDefaultSubobject<UPassiveNiagaraComponent>("HaloOfProtectionComponent");
+	HaloOfProtectionNiagaraComponent->SetupAttachment(EffectAttachComponent);
+	LifeSiphonNiagaraComponent = CreateDefaultSubobject<UPassiveNiagaraComponent>("LifeSiphonNiagaraComponent");
+	LifeSiphonNiagaraComponent->SetupAttachment(EffectAttachComponent);
+	ManaSiphonNiagaraComponent = CreateDefaultSubobject<UPassiveNiagaraComponent>("ManaSiphonNiagaraComponent");
+	ManaSiphonNiagaraComponent->SetupAttachment(EffectAttachComponent);
+	
 }
+
+void AAuraCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(AAuraCharacterBase, bIsStunned);
+	DOREPLIFETIME(AAuraCharacterBase, bIsBurned);
+	DOREPLIFETIME(AAuraCharacterBase, bIsBeingShocked);
+}
+
+void AAuraCharacterBase::BeginPlay()
+{
+	Super::BeginPlay();
+	
+}
+
+void AAuraCharacterBase::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	EffectAttachComponent->SetWorldRotation(FRotator::ZeroRotator);
+}
+
 
 UAbilitySystemComponent* AAuraCharacterBase::GetAbilitySystemComponent() const
 {
@@ -56,6 +96,21 @@ FOnDamageSignature& AAuraCharacterBase::GetOnDamageSignature()
 	return OnDamageDelegate;
 }
 
+void AAuraCharacterBase::SetIsBeingShocked_Implementation(bool bInShock)
+{
+	bIsBeingShocked = bInShock;
+}
+
+bool AAuraCharacterBase::IsBeingShocked_Implementation() const
+{
+	return bIsBeingShocked;
+}
+
+USkeletalMeshComponent* AAuraCharacterBase::GetWeapon_Implementation()
+{
+	return Weapon;
+}
+
 void AAuraCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathImpulse)
 {
 	UGameplayStatics::PlaySoundAtLocation(this, DeathSound, GetActorLocation(), GetActorRotation());
@@ -75,14 +130,24 @@ void AAuraCharacterBase::MulticastHandleDeath_Implementation(const FVector& Deat
 	Dissolve();
 	
 	bDead = true;
+	BurnDebuffComponent->Deactivate();
+	StunDebuffComponent->Deactivate();
 	OnDeathDelegate.Broadcast(this);	
 }
 
-// Called when the game starts or when spawned
-void AAuraCharacterBase::BeginPlay()
+void AAuraCharacterBase::OnRep_Stunned()
 {
-	Super::BeginPlay();
 	
+}
+
+void AAuraCharacterBase::OnRep_Burned()
+{
+}
+
+void AAuraCharacterBase::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
+{
+	bIsStunned = NewCount > 0;
+	GetCharacterMovement()->MaxWalkSpeed = bIsStunned ? 0.f : BaseWalkSpeed;
 }
 
 FVector AAuraCharacterBase::GetCombatSocketLocation_Implementation(const FGameplayTag& MontageTag)

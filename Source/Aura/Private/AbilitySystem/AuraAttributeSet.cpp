@@ -272,11 +272,11 @@ void UAuraAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 {
 	const float LocalIncomingDamage = GetIncomingDamage();
 	SetIncomingDamage(0.f);
-	if(LocalIncomingDamage >0.f)
+	if (LocalIncomingDamage > 0.f)
 	{
 		const float NewHealth = GetHealth() - LocalIncomingDamage;
 		SetHealth(FMath::Clamp(NewHealth, 0.f, GetMaxHealth()));
-			
+
 		const bool bFatal = NewHealth <= 0.f;
 		if (bFatal)
 		{
@@ -284,16 +284,20 @@ void UAuraAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 			if (CombatInterface)
 			{
 				FVector Impulse = UAuraAbilitySystemLibrary::GetDeathImpulse(Props.EffectContextHandle);
-				CombatInterface->Die(Impulse);
+				CombatInterface->Die(UAuraAbilitySystemLibrary::GetDeathImpulse(Props.EffectContextHandle));
 			}
 			SendXPEvent(Props);
+			
 		}
 		else
 		{
-			FGameplayTagContainer TagContainer;
-			TagContainer.AddTag(FAuraGameplayTags::Get().Effects_HitReact);
-			Props.TargetASC->TryActivateAbilitiesByTag(TagContainer);
-
+			if (Props.TargetCharacter->Implements<UCombatInterface>() && !ICombatInterface::Execute_IsBeingShocked(Props.TargetCharacter))
+			{
+				FGameplayTagContainer TagContainer;
+				TagContainer.AddTag(FAuraGameplayTags::Get().Effects_HitReact);
+				Props.TargetASC->TryActivateAbilitiesByTag(TagContainer);
+			}
+			
 			const FVector& KnockbackForce = UAuraAbilitySystemLibrary::GetKnockbackForce(Props.EffectContextHandle);
 			if (!KnockbackForce.IsNearlyZero(1.f))
 			{
@@ -304,7 +308,6 @@ void UAuraAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 		const bool bBlock = UAuraAbilitySystemLibrary::IsBlockedHit(Props.EffectContextHandle);
 		const bool bCriticalHit = UAuraAbilitySystemLibrary::IsCriticalHit(Props.EffectContextHandle);
 		ShowFloatingText(Props, LocalIncomingDamage, bBlock, bCriticalHit);
-		
 		if (UAuraAbilitySystemLibrary::IsSuccessfulDebuff(Props.EffectContextHandle))
 		{
 			Debuff(Props);
@@ -322,6 +325,7 @@ void UAuraAttributeSet::HandleIncomingXP(const FEffectProperties& Props)
 	{
 		const int32 CurrentLevel = ICombatInterface::Execute_GetPlayerLevel(Props.SourceCharacter);
 		const int32 CurrentXP = IPlayerInterface::Execute_GetXP(Props.SourceCharacter);
+		UE_LOG(LogTemp,Warning,TEXT("%d"),CurrentXP);
 
 		const int32 NewLevel = IPlayerInterface::Execute_FindLevelForXP(Props.SourceCharacter, CurrentXP + LocalIncomingXP);
 		const int32 NumLevelUps = NewLevel - CurrentLevel;
