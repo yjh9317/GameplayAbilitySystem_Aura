@@ -49,13 +49,13 @@ private:
 	float LifeSpan = 15.f;
 
 	
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditAnywhere, meta= (AllowPrivateAccess="true"))
 	TObjectPtr<UNiagaraSystem> ImpactEffect;
 
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditAnywhere, meta= (AllowPrivateAccess="true"))
 	TObjectPtr<USoundBase> ImpactSound;
 
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditAnywhere, meta= (AllowPrivateAccess="true"))
 	TObjectPtr<USoundBase> LoopingSound;
 };
 
